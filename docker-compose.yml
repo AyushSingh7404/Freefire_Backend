@@ -1,0 +1,75 @@
+version: "3.9"
+
+# ── Notes ──────────────────────────────────────────────────────────────────────
+# Development:  docker compose up --build
+# Production:   remove the volume mount under 'web' and the --reload flag
+#               (done automatically when you don't override CMD)
+#
+# Run migrations after starting:
+#   docker compose exec web alembic upgrade head
+#
+# Create first migration:
+#   docker compose exec web alembic revision --autogenerate -m "initial_schema"
+#   docker compose exec web alembic upgrade head
+
+services:
+
+  # ── FastAPI Application ──────────────────────────────────────────────────────
+  web:
+    build: .
+    container_name: freefire_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy   # wait for Postgres to be ready before starting
+    volumes:
+      # DEV ONLY: live-reload by mounting source code into the container
+      # Comment out in production (code is already baked into the image)
+      - .:/app
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+    restart: unless-stopped
+    networks:
+      - freefire_network
+
+  # ── PostgreSQL Database ──────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine          # alpine = smallest Postgres image
+    container_name: freefire_postgres
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      # Named volume: data persists between container restarts
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose to host so you can connect with psql or pgAdmin locally
+      # In production, remove this — DB should only be reachable internally
+      - "5432:5432"
+    healthcheck:
+      # Wait until Postgres is accepting connections before marking healthy
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - freefire_network
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  freefire_network:
+    driver: bridge

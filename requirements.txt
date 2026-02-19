@@ -1,0 +1,36 @@
+# Core
+fastapi==0.129.0
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.46
+# psycopg2 (not -binary): the Dockerfile installs libpq-dev + gcc so we can compile
+# the C extension. This gives better performance and is the recommended approach
+# for production Docker deployments. Use psycopg2-binary only for local dev without Docker.
+psycopg2==2.9.10
+alembic==1.14.0
+
+# Pydantic & Settings
+pydantic==2.12.5
+pydantic[email]
+pydantic-settings==2.7.0
+
+# Auth & Security
+PyJWT==2.11.0
+passlib[bcrypt]==1.7.4
+
+# Email
+fastapi-mail==1.6.1
+
+# Rate Limiting
+slowapi==0.1.9
+
+# File Uploads / CDN
+cloudinary==1.41.0
+
+# Payments
+razorpay==1.4.2
+
+# Utilities
+python-dotenv==1.0.1

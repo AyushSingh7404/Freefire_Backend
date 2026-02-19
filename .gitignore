@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment — NEVER commit this
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Alembic — do not ignore versions, but ignore cache
+alembic/__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
