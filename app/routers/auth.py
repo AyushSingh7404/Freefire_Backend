@@ -5,9 +5,8 @@ OTP flow for registration:
   1. POST /auth/register  → create user (unverified) + send OTP
   2. POST /auth/verify-register → verify OTP → mark verified → return tokens
 
-OTP flow for login:
-  1. POST /auth/login → validate credentials → send OTP
-  2. POST /auth/verify-login → verify OTP → return tokens
+Login (direct, no OTP):
+  POST /auth/login → validate credentials → return tokens immediately
 
 Password reset:
   1. POST /auth/forgot-password → send OTP (always 200, never reveals if email exists)
@@ -103,44 +102,22 @@ async def verify_register(
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 
-@router.post("/login", response_model=MessageResponse)
+@router.post("/login", response_model=LoginWithTokenResponse)
 @limiter.limit("10/minute")
 async def login(
     request: Request,
     body: LoginRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
-    Step 1 of login: validate credentials, send OTP.
-    Credentials are validated BEFORE sending OTP (don't send OTP for wrong passwords).
-    Error messages are intentionally generic to prevent user enumeration.
+    Login with email and password. Returns tokens immediately.
+    No OTP required for login.
     """
     user = auth_service.initiate_login(db, email=body.email, password=body.password)
 
-    raw_otp = otp_service.create_otp_record(
-        db,
-        email=body.email,
-        purpose="login",
-        user_id=str(user.id),
-    )
+    access_token = create_access_token(str(user.id), user.is_admin)
+    refresh_token = create_refresh_token(str(user.id))
 
-    background_tasks.add_task(send_otp_email, body.email, raw_otp, "login")
-
-    return {"message": "OTP sent to your email. Please verify to complete login."}
-
-
-@router.post("/verify-login", response_model=LoginWithTokenResponse)
-@limiter.limit("10/minute")
-async def verify_login(
-    request: Request,
-    body: VerifyLoginRequest,
-    db: Session = Depends(get_db),
-):
-    """Step 2 of login: verify OTP and receive auth tokens."""
-    user, access_token, refresh_token = auth_service.verify_login(
-        db, email=body.email, otp=body.otp
-    )
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -160,8 +137,8 @@ async def send_otp(
     db: Session = Depends(get_db),
 ):
     """
-    Resend OTP for any purpose. Rate limited to 3/minute.
-    For login resend: user must have attempted login first (credentials are not re-checked here).
+    Resend OTP for registration or password reset purposes.
+    For registration resend: user must have initiated registration first.
     Always returns 200 to prevent email enumeration.
     """
     user = db.query(User).filter(User.email == body.email).first()

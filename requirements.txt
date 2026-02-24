@@ -19,6 +19,7 @@ pydantic-settings==2.7.0
 # Auth & Security
 PyJWT==2.11.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.1.1
 
 # Email
 fastapi-mail==1.6.1
@@ -31,6 +32,10 @@ cloudinary==1.41.0
 
 # Payments
 razorpay==1.4.2
+
+# Timezone data — required on Windows (Linux/Mac get this from the OS)
+# Python's zoneinfo module needs this for TIMESTAMP(timezone=True) handling
+tzdata==2025.2
 
 # Utilities
 python-dotenv==1.0.1

@@ -120,7 +120,14 @@ def get_league_leaderboard(
     """
     Top players in a specific league by coins won within that league.
     """
+    # Accept either UUID or tier/name slug (e.g., "silver", "gold").
     league = db.query(League).filter(League.id == league_id).first()
+    if not league:
+        league = (
+            db.query(League)
+            .filter(func.lower(League.tier) == league_id.lower())
+            .first()
+        )
     if not league:
         raise NotFoundException("League")
 
