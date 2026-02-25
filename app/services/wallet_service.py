@@ -25,7 +25,7 @@ def get_or_create_wallet(db: Session, user_id: str) -> Wallet:
     """
     wallet = db.query(Wallet).filter(Wallet.user_id == user_id).first()
     if not wallet:
-        wallet = Wallet(user_id=user_id, balance=0, locked_balance=0)
+        wallet = Wallet(user_id=user_id, balance=0)
         db.add(wallet)
         db.commit()
         db.refresh(wallet)
@@ -61,7 +61,7 @@ def credit_coins(
     if not wallet:
         raise NotFoundException("Wallet")
 
-    wallet.balance += amount
+    wallet.balance += amount  # closed economy: direct credit, no split balances
 
     txn = Transaction(
         wallet_id=wallet.id,
@@ -87,8 +87,8 @@ def debit_coins(
 ) -> Transaction:
     """
     Debit coins from a user's wallet atomically.
-    Checks available balance (balance - locked_balance) before deducting.
-    Raises InsufficientCoinsException if not enough available coins.
+    Checks balance before deducting.
+    Raises InsufficientCoinsException if not enough coins.
     """
     wallet = (
         db.execute(
@@ -99,9 +99,8 @@ def debit_coins(
     if not wallet:
         raise NotFoundException("Wallet")
 
-    available = wallet.balance - wallet.locked_balance
-    if available < amount:
-        raise InsufficientCoinsException(available=available, required=amount)
+    if wallet.balance < amount:
+        raise InsufficientCoinsException(available=wallet.balance, required=amount)
 
     wallet.balance -= amount
 

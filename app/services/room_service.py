@@ -73,9 +73,8 @@ def join_room(
     if not wallet:
         raise NotFoundException("Wallet")
 
-    available = wallet.balance - wallet.locked_balance
-    if available < room.entry_fee:
-        raise InsufficientCoinsException(available=available, required=room.entry_fee)
+    if wallet.balance < room.entry_fee:
+        raise InsufficientCoinsException(available=wallet.balance, required=room.entry_fee)
 
     # Now lock the room row
     room = (

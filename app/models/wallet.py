@@ -19,10 +19,8 @@ class Wallet(Base):
     )
     # All coin values stored as integers — never use floats for currency.
     # 1 coin = 1 unit. No decimal coins in this system.
+    # Aurex uses a closed coin economy — no withdrawals, no TDS, no payout system.
     balance = Column(Integer, nullable=False, default=0)
-    # Coins held/locked while user is in an active room.
-    # Available coins = balance - locked_balance
-    locked_balance = Column(Integer, nullable=False, default=0)
     updated_at = Column(
         TIMESTAMP(timezone=True),
         nullable=False,

@@ -11,6 +11,7 @@ from app.models.wallet import Wallet, Transaction
 from app.models.match import Match
 from app.models.otp import OTPRecord
 from app.models.audit_log import AuditLog
+from app.models.coin_package import CoinPackage
 
 __all__ = [
     "User",
@@ -23,4 +24,5 @@ __all__ = [
     "Match",
     "OTPRecord",
     "AuditLog",
+    "CoinPackage",
 ]

@@ -20,6 +20,10 @@ Endpoints:
   POST /admin/wallet/debit
   POST /admin/matches/{room_id}/settle
   GET  /admin/audit-logs
+  GET  /admin/coin-packages         (all packages including inactive)
+  POST /admin/coin-packages
+  PUT  /admin/coin-packages/{id}
+  DELETE /admin/coin-packages/{id}  (soft-deactivate)
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -36,9 +40,13 @@ from app.models.room import Room, RoomPlayer
 from app.models.wallet import Wallet, Transaction
 from app.models.match import Match
 from app.models.audit_log import AuditLog
+from app.models.coin_package import CoinPackage
 from app.schemas.league import LeagueOut, LeagueCreateRequest, LeagueUpdateRequest
 from app.schemas.room import RoomOut, RoomCreateRequest, RoomUpdateRequest, RoomPlayerOut
 from app.schemas.wallet import AdminWalletActionRequest
+from app.schemas.coin_package import (
+    CoinPackageAdminOut, CoinPackageCreateRequest, CoinPackageUpdateRequest
+)
 from app.schemas.match import SettleRoomRequest
 from app.schemas.admin import (
     AdminStatsResponse,
@@ -325,7 +333,6 @@ def get_user_detail(
         "user": UserOut.model_validate(user),
         "wallet": {
             "balance": wallet.balance if wallet else 0,
-            "locked_balance": wallet.locked_balance if wallet else 0,
         },
         "recent_matches": [
             {
@@ -600,3 +607,108 @@ def get_audit_logs(
         limit=limit,
         logs=[AuditLogOut.model_validate(log) for log in logs],
     )
+
+
+# ── Coin Package Management ────────────────────────────────────────────────
+
+@router.get("/coin-packages", response_model=List[CoinPackageAdminOut])
+def admin_list_coin_packages(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """List ALL coin packages (active and inactive). Admin view."""
+    return (
+        db.query(CoinPackage)
+        .order_by(CoinPackage.sort_order.asc(), CoinPackage.coins.asc())
+        .all()
+    )
+
+
+@router.post("/coin-packages", response_model=CoinPackageAdminOut, status_code=201)
+def admin_create_coin_package(
+    body: CoinPackageCreateRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Create a new coin package."""
+    pkg = CoinPackage(
+        coins=body.coins,
+        price_inr=body.price_inr,
+        is_active=body.is_active,
+        is_popular=body.is_popular,
+        sort_order=body.sort_order,
+    )
+    db.add(pkg)
+    db.commit()
+    db.refresh(pkg)
+
+    log_admin_action(
+        db, admin_id=str(admin.id), action="CREATE_COIN_PACKAGE",
+        target_type="coin_package", target_id=str(pkg.id),
+        details={"coins": pkg.coins, "price_inr": pkg.price_inr},
+    )
+    return pkg
+
+
+@router.put("/coin-packages/{package_id}", response_model=CoinPackageAdminOut)
+def admin_update_coin_package(
+    package_id: str,
+    body: CoinPackageUpdateRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Update a coin package. All fields optional."""
+    pkg = db.query(CoinPackage).filter(CoinPackage.id == package_id).first()
+    if not pkg:
+        raise NotFoundException("CoinPackage")
+
+    changes = {}
+    if body.coins is not None:
+        changes["coins"] = {"from": pkg.coins, "to": body.coins}
+        pkg.coins = body.coins
+    if body.price_inr is not None:
+        changes["price_inr"] = {"from": pkg.price_inr, "to": body.price_inr}
+        pkg.price_inr = body.price_inr
+    if body.is_active is not None:
+        changes["is_active"] = body.is_active
+        pkg.is_active = body.is_active
+    if body.is_popular is not None:
+        pkg.is_popular = body.is_popular
+    if body.sort_order is not None:
+        pkg.sort_order = body.sort_order
+
+    db.commit()
+    db.refresh(pkg)
+
+    log_admin_action(
+        db, admin_id=str(admin.id), action="UPDATE_COIN_PACKAGE",
+        target_type="coin_package", target_id=str(pkg.id),
+        details=changes,
+    )
+    return pkg
+
+
+@router.delete("/coin-packages/{package_id}")
+def admin_deactivate_coin_package(
+    package_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Soft-deactivate a coin package (sets is_active=False).
+    The package is never hard-deleted — it may be referenced in transaction history.
+    Deactivated packages are hidden from users but remain in admin list.
+    """
+    pkg = db.query(CoinPackage).filter(CoinPackage.id == package_id).first()
+    if not pkg:
+        raise NotFoundException("CoinPackage")
+
+    pkg.is_active = False
+    db.commit()
+
+    log_admin_action(
+        db, admin_id=str(admin.id), action="DEACTIVATE_COIN_PACKAGE",
+        target_type="coin_package", target_id=str(pkg.id),
+        details={"coins": pkg.coins, "price_inr": pkg.price_inr},
+    )
+    return {"message": f"Package ({pkg.coins} coins / ₹{pkg.price_inr}) deactivated."}

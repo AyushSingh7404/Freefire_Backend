@@ -18,7 +18,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.core.rate_limiter import limiter
-from app.routers import auth, users, leagues, rooms, wallet, leaderboard, matches, admin, websocket
+from app.routers import auth, users, leagues, rooms, wallet, leaderboard, matches, admin, websocket, coin_packages
 
 
 def create_app() -> FastAPI:
@@ -69,6 +69,9 @@ def create_app() -> FastAPI:
 
     # Wallet & payments
     app.include_router(wallet.router, prefix="/wallet", tags=["Wallet"])
+
+    # Coin packages — public pricing endpoint (no auth required)
+    app.include_router(coin_packages.router, prefix="/coin-packages", tags=["Coin Packages"])
 
     # Leaderboard
     app.include_router(leaderboard.router, prefix="/leaderboard", tags=["Leaderboard"])

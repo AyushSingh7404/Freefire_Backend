@@ -4,13 +4,15 @@ from datetime import datetime
 
 
 class WalletOut(BaseModel):
+    """
+    Closed coin economy: users have a single balance.
+    No withdrawal, no TDS, no split between deposit vs winning coins.
+    """
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     user_id: str
     balance: int
-    locked_balance: int
-    available_balance: int  # computed field: balance - locked_balance
     updated_at: datetime
 
     @field_validator("id", "user_id", mode="before")
@@ -24,8 +26,6 @@ class WalletOut(BaseModel):
             id=str(wallet.id),
             user_id=str(wallet.user_id),
             balance=wallet.balance,
-            locked_balance=wallet.locked_balance,
-            available_balance=wallet.balance - wallet.locked_balance,
             updated_at=wallet.updated_at,
         )
 
@@ -55,23 +55,12 @@ class TransactionListResponse(BaseModel):
 
 
 class PaymentInitiateRequest(BaseModel):
-    """Initiate a Razorpay order for coin purchase."""
-    amount_inr: float   # in rupees (min ₹1)
-    coins: int          # how many coins they're buying for that amount
-
-    @field_validator("amount_inr")
-    @classmethod
-    def amount_positive(cls, v: float) -> float:
-        if v < 1:
-            raise ValueError("Minimum payment is ₹1")
-        return v
-
-    @field_validator("coins")
-    @classmethod
-    def coins_positive(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("Must purchase at least 1 coin")
-        return v
+    """
+    Initiate a Razorpay order using a CoinPackage ID.
+    Frontend fetches available packages from GET /coin-packages,
+    then sends the chosen package's ID here.
+    """
+    package_id: str     # UUID of the CoinPackage to purchase
 
 
 class PaymentInitiateResponse(BaseModel):

@@ -17,6 +17,7 @@ from app.core.dependencies import get_current_user
 from app.core.rate_limiter import limiter
 from app.models.user import User
 from app.models.wallet import Transaction
+from app.models.coin_package import CoinPackage
 from app.schemas.wallet import (
     WalletOut,
     TransactionListResponse,
@@ -70,23 +71,37 @@ def initiate_payment(
     request: Request,
     body: PaymentInitiateRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
-    Create a Razorpay order. Frontend uses the returned order details to
-    open the Razorpay checkout modal.
+    Create a Razorpay order from a coin package ID.
+    Frontend fetches packages from GET /coin-packages, user picks one,
+    frontend sends the package UUID here.
 
     Returns:
       - razorpay_order_id: needed by frontend for checkout
-      - amount_paise: the charge amount (for display)
-      - razorpay_key_id: public key — frontend needs this for the modal
-      - coins: number of coins to credit on successful payment
+      - amount_paise: the charge amount in paise
+      - razorpay_key_id: public key for the Razorpay modal
+      - coins: coins to credit on successful payment (from the package)
     """
-    order = create_order(amount_inr=body.amount_inr, coins=body.coins)
+    # Look up the package — must be active
+    package = (
+        db.query(CoinPackage)
+        .filter(CoinPackage.id == body.package_id, CoinPackage.is_active == True)
+        .first()
+    )
+    if not package:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coin package not found or is no longer available.",
+        )
+
+    order = create_order(amount_inr=package.price_inr, coins=package.coins)
     return PaymentInitiateResponse(
         razorpay_order_id=order["id"],
         amount_paise=order["amount"],
         currency=order["currency"],
-        coins=body.coins,
+        coins=package.coins,
         razorpay_key_id=settings.razorpay_key_id,
     )
 
